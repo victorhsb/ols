@@ -113,7 +113,20 @@ thread_request_main :: proc(data: rawptr) {
 		method := root["method"].(json.String)
 
 		if method == "$/cancelRequest" {
-			append(&deletings, Request{id = id})
+			params_value, params_ok := root["params"].(json.Object)
+			if params_ok {
+				cancel_id_value, cancel_id_ok := params_value["id"]
+				if cancel_id_ok {
+					cancel_id: RequestId
+					#partial switch v in cancel_id_value {
+					case json.String:
+						cancel_id = v
+					case json.Integer:
+						cancel_id = v
+					}
+					append(&deletings, Request{id = cancel_id})
+				}
+			}
 			json.destroy_value(root)
 		} else if method in notification_map {
 			append(&requests, Request{value = root, is_notification = true})
@@ -281,7 +294,7 @@ consume_requests :: proc(config: ^common.Config, writer: ^Writer) -> bool {
 		delete_index := -1
 		for request, i in requests {
 			if request.id == d.id {
-				delete_index := i
+				delete_index = i
 				break
 			}
 		}
@@ -328,11 +341,14 @@ consume_requests :: proc(config: ^common.Config, writer: ^Writer) -> bool {
 
 
 cancel :: proc(value: json.Value, id: RequestId, writer: ^Writer, config: ^common.Config) {
-	response := make_response_message(id = id, params = ResponseParams{})
+	response := make_response_message_error(
+		id = id,
+		error = ResponseError{code = .RequestCancelled, message = "Request cancelled"},
+	)
 
 	json.destroy_value(value)
 
-	send_response(response, writer)
+	send_error(response, writer)
 }
 
 call :: proc(value: json.Value, id: RequestId, writer: ^Writer, config: ^common.Config) {
