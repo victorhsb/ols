@@ -113,11 +113,6 @@ Options:
 
 - `enable_code_action_invert_if`: Enables a code action to invert if statements.
 
-- `struct_fields_underscore_visibility`: Controls visibility of struct fields starting with `_`:
-  - `""` (default): no hiding, all fields are visible
-  - `"file"`: hide fields when accessed from outside the declaring file 
-  - `"package"`: hide fields when accessed from outside the declaring package
-
 - `odin_command`: Specify the location to your Odin executable, rather than relying on the environment path.
 
 - `odin_root_override`: Allows you to specify a custom `ODIN_ROOT` that `ols` will use to look for `odin` core libraries when implementing custom runtimes.
@@ -204,7 +199,7 @@ Install the package https://github.com/sublimelsp/LSP
 
 Configuration of the LSP:
 
-```jsonc
+```json
 {
 	"clients": {
 		"odin": {
@@ -251,11 +246,99 @@ Configuration of the LSP:
 
 ### Neovim
 
-Neovim has a builtin support for LSP.
+Neovim has builtin support for LSP. You do not need CoC to use OLS.
 
-There is a plugin that makes the setup easier, called [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig). You can install it with your preferred package manager.
+Before configuring Neovim, make sure these are true:
 
-A simple configuration that uses the default `ols` settings would be like this:
+- `ols` is built and executable.
+- `odin` is installed and executable.
+- The OLS `builtin` directory is available next to the `ols` binary, or `OLS_BUILTIN_FOLDER` points at it.
+- Your project has an `ols.json` file at the workspace root, or your editor config provides `collections`.
+
+If you built OLS from source and keep the binary somewhere other than your shell `PATH`, use explicit paths in the Neovim config. This also avoids Mason shims or different GUI/terminal environment variables changing which `ols` or `odin` Neovim sees.
+
+#### Native Neovim 0.11+
+
+Neovim 0.11 added `vim.lsp.config` and `vim.lsp.enable`. A minimal setup is:
+
+```lua
+vim.lsp.config("ols", {
+  cmd = { "ols" },
+  filetypes = { "odin" },
+  root_markers = { "ols.json", ".git" },
+})
+vim.lsp.enable("ols")
+```
+
+For a custom OLS build, configure explicit paths and initialization options:
+
+```lua
+vim.lsp.config("ols", {
+  cmd = { "/path/to/ols" },
+  cmd_env = {
+    -- Needed when the OLS builtin folder is not next to the binary.
+    OLS_BUILTIN_FOLDER = "/path/to/ols/builtin",
+  },
+  filetypes = { "odin" },
+  root_markers = { "ols.json", ".git" },
+  init_options = {
+    odin_command = "/path/to/odin",
+    collections = {
+      { name = "core", path = "/path/to/Odin/core" },
+      { name = "vendor", path = "/path/to/Odin/vendor" },
+      { name = "shared", path = "/path/to/Odin/shared" },
+      -- Add your own collections here.
+      -- { name = "my_collection", path = "/path/to/my_collection" },
+    },
+    enable_document_symbols = true,
+    enable_hover = true,
+    enable_snippets = true,
+  },
+})
+vim.lsp.enable("ols")
+```
+
+If OLS does not attach when launching Neovim directly with an Odin file, start it from a `FileType` autocmd instead of relying on `vim.lsp.enable`. In this version, keep the `vim.lsp.config("ols", ...)` block above, remove `vim.lsp.enable("ols")`, and add:
+
+```lua
+local function start_ols(bufnr)
+  if #vim.lsp.get_clients({ bufnr = bufnr, name = "ols" }) > 0 then
+    return
+  end
+  vim.lsp.start(vim.lsp.config.ols, { bufnr = bufnr })
+end
+
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "odin",
+  callback = function(args)
+    start_ols(args.buf)
+  end,
+})
+
+vim.api.nvim_create_autocmd("VimEnter", {
+  callback = function()
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_loaded(bufnr) and vim.bo[bufnr].filetype == "odin" then
+        start_ols(bufnr)
+      end
+    end
+  end,
+})
+```
+
+To check that OLS attached to the current buffer, open an `.odin` file and run:
+
+```vim
+:lua =vim.lsp.get_clients({ bufnr = 0 })
+```
+
+You should see a client named `ols`.
+
+#### nvim-lspconfig
+
+[nvim-lspconfig](https://github.com/neovim/nvim-lspconfig) also provides an OLS configuration. Install it with your preferred package manager.
+
+A simple configuration that uses the default `ols` settings looks like this:
 
 ```lua
 require'lspconfig'.ols.setup {}
@@ -274,7 +357,52 @@ require'lspconfig'.ols.setup {
 }
 ```
 
-* use an explicit `cmd` for `ols` when using a custom build
+Use an explicit `cmd` and `OLS_BUILTIN_FOLDER` when using a custom build:
+
+```lua
+require'lspconfig'.ols.setup {
+  cmd = { "/path/to/ols" },
+  cmd_env = {
+    OLS_BUILTIN_FOLDER = "/path/to/ols/builtin",
+  },
+  init_options = {
+    odin_command = "/path/to/odin",
+  },
+}
+```
+
+#### Completion snippets
+
+If `enable_snippets` is true and you use [nvim-cmp](https://github.com/hrsh7th/nvim-cmp), configure a snippet expander. On recent Neovim versions, the builtin snippet engine is enough:
+
+```lua
+require("cmp").setup({
+  snippet = {
+    expand = function(args)
+      vim.snippet.expand(args.body)
+    end,
+  },
+})
+```
+
+Alternatively, set `enable_snippets = false` in OLS init options or `ols.json`.
+
+#### Formatting
+
+OLS can provide formatting through `odinfmt` when `enable_format` is enabled. To format the current buffer through LSP:
+
+```vim
+:lua vim.lsp.buf.format()
+```
+
+If Neovim cannot find `odinfmt`, make sure it is in the environment used by Neovim, or add its directory to `cmd_env.PATH` in the OLS config:
+
+```lua
+cmd_env = {
+  OLS_BUILTIN_FOLDER = "/path/to/ols/builtin",
+  PATH = "/path/to/odinfmt/directory:" .. vim.env.PATH,
+}
+```
 
 Neovim can run Odinfmt on save using the [conform](https://github.com/stevearc/conform.nvim) plugin. Here is a sample configuration using the [lazy.nvim](https://github.com/folke/lazy.nvim) package manager:
 
@@ -302,33 +430,6 @@ local M = {
 return M
 ```
 
-#### LazyVim + Mason
-
-If you use LazyVim with Mason, `cmd = { "ols" }` may resolve to Mason's shim instead of your custom `ols` binary. OLS already documents editor-provided configuration and `odin_command`, so when using a custom OLS build it is safer to disable Mason only for OLS and set explicit paths.
-
-```lua
-return {
-  {
-    "neovim/nvim-lspconfig",
-    opts = {
-      servers = {
-        ols = {
-          mason = false,
-          cmd = { "/path/to/ols" },
-          settings = {
-            odin_command = "/path/to/odin",
-          },
-        },
-      },
-    },
-  },
-}
-```
-
-Notes:
-
-* put `ols` inside `opts.servers`
-* keep Mason enabled for other language servers if you want
 ### Emacs
 
 For Emacs, there are two packages available for LSP; lsp-mode and eglot.
@@ -351,16 +452,6 @@ The `use-package` statements below assume you're using a package manager like St
 (use-package odin-ts-mode
   :ensure (:host github :repo "Sampie159/odin-ts-mode")
   :mode ("\\.odin\\'" . odin-ts-mode))
-```
-
-If you are using Emacs 29 or above you can use `package-vc-install`.
-
-```elisp
-(package-vc-install
- '(odin-mode :url "https://github.com/mattt-b/odin-mode.git"))
-
-(package-vc-install
- '(odin-ts-mode :url "https://github.com/Sampie159/odin-ts-mode.git"))
 ```
 
 And then choose either the built-in `eglot` or `lsp-mode` packages below. Both should work very similarly.
@@ -447,7 +538,7 @@ Configure the plugin in micro's settings.json:
 First, make sure you have the LSP plugin enabled. Then, you can find LSP settings for Kate in Settings -> Configure Kate -> LSP Client -> User Server Settings.
 
 You may have to set the folders for your Odin home path directly, like in the following example:
-```jsonc
+```json
 {
     "servers": {
         "odin": {
