@@ -29,6 +29,7 @@ platform_os: map[string]struct{} = {
 	"wasm"    = {},
 	"netbsd"  = {},
 	"freebsd" = {},
+	"haiku"   = {},
 }
 
 
@@ -60,6 +61,8 @@ os_string_to_enum: map[string]runtime.Odin_OS_Type = {
 	"Wasi"         = .WASI,
 	"wasi"         = .WASI,
 	"WASI"         = .WASI,
+	"Haiku"        = .Haiku,
+	"haiku"        = .Haiku,
 	"Js"           = .JS,
 	"js"           = .JS,
 	"JS"           = .JS,

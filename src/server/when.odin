@@ -23,6 +23,7 @@ convert_os_string: map[string]string = {
 	"linux"        = "Linux",
 	"freebsd"      = "FreeBSD",
 	"wasi"         = "WASI",
+	"haiku"        = "Haiku",
 	"js"           = "JS",
 	"freestanding" = "Freestanding",
 	"openbsd"      = "OpenBSD",
