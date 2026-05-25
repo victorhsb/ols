@@ -245,6 +245,10 @@ Version :: union {
 	json.Null,
 }
 
+CancelParams :: struct {
+	id: RequestId,
+}
+
 VersionedTextDocumentIdentifier :: struct {
 	uri:     string,
 	version: int,
@@ -438,7 +442,7 @@ OlsConfig :: struct {
 	enable_checker_workspace_diagnostics:    Maybe(bool),
 	enable_auto_import:                      Maybe(bool),
 	enable_code_action_invert_if:            Maybe(bool),
-	struct_fields_underscore_visibility: 	 string,
+	struct_fields_underscore_visibility:     string,
 	disable_parser_errors:                   Maybe(bool),
 	verbose:                                 Maybe(bool),
 	file_log:                                Maybe(bool),
